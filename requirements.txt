@@ -1,0 +1,38 @@
+# Runtime dependencies — PATH-AI
+# Semuanya wheel pure-Python atau wheel biner yang tersedia untuk Windows
+# dan Linux. Tidak ada pustaka yang membutuhkan GTK/Pango/Cairo, sehingga
+# image Docker bisa memakai python:slim tanpa lapisan grafis tambahan dan
+# pengembangan di Windows berjalan tanpa instalasi sistem apa pun.
+#
+# Versi dipin longgar (>=) agar patch keamanan tetap masuk.
+
+fastapi>=0.115.0
+uvicorn[standard]>=0.32.0
+httpx>=0.27.0
+pydantic>=2.9.0
+pydantic-settings>=2.5.0
+python-multipart>=0.0.9
+tenacity>=8.2.0
+
+# Catatan: tidak ada pustaka token di sini. Layanan ini tidak mengurus akun;
+# login dan sesi ditangani backend aplikasi, yang mengirim identitas pengajar
+# lewat header `X-Teacher-Id`.
+
+# Penyusunan PDF. reportlab dipakai langsung (platypus) alih-alih mesin
+# render HTML: hasilnya deterministik, bisa diuji, dan tidak memerlukan
+# pustaka grafis sistem sama sekali.
+reportlab>=4.2.0
+
+# Pembacaan dokumen
+PyMuPDF>=1.24.9
+python-docx>=1.1.2
+pytesseract>=0.3.13
+Pillow>=10.4.0
+
+# Penulisan rekap asesmen ke Excel, memakai template milik sekolah sehingga
+# berkas hasilnya bisa langsung dimasukkan ke sistem nilai mereka.
+openpyxl>=3.1.5
+
+# Catatan: `tiktoken` sengaja TIDAK dipakai.
+# Estimasi token pra-panggilan memakai heuristik karakter (core/tokens.py);
+# akuntansi token sebenarnya memakai `usage` dari respons OpenRouter.

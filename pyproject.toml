@@ -1,0 +1,33 @@
+[project]
+name = "path-ai"
+version = "0.1.0"
+description = "Layanan AI untuk pengajar: materi, koreksi, kemiripan, indikasi AI"
+requires-python = ">=3.12"
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+asyncio_default_fixture_loop_scope = "function"
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.ruff]
+line-length = 92
+target-version = "py312"
+src = ["app", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "ASYNC"]
+ignore = [
+    # `Depends(...)` sebagai nilai bawaan argumen adalah pola resmi FastAPI.
+    "B008",
+    # UP047 menuntut sintaks generik gaya baru `def f[T](...)`. Sintaks itu
+    # baru ada di Python 3.12 dan belum lazim di tutorial, sehingga pembaca
+    # yang baru belajar lebih sering menemukan `TypeVar`. Gaya `TypeVar`
+    # dipilih dengan sadar demi keterbacaan; aturannya dimatikan di sini.
+    "UP047",
+]
+
+[tool.ruff.lint.per-file-ignores]
+# Test memuat teks contoh yang panjang dan baris tabel uji; memaksa pemecahan
+# baris di sana mengurangi keterbacaan tanpa manfaat.
+"tests/*" = ["E501", "S101"]

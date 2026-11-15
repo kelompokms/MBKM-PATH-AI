@@ -1,0 +1,32 @@
+# Nama project sengaja berbeda dari aplikasi PATH-AI lama (`path-ai`) agar
+# container, network, dan volume tidak pernah bertabrakan.
+
+name: path-ai-mbkm
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: path-ai-mbkm:latest
+    container_name: path-ai-mbkm-api
+    restart: unless-stopped
+    env_file:
+      - .env
+    ports:
+      # Host 8001 → container 8001. Aplikasi lama memakai 8000.
+      - "8001:8001"
+    # Direktori kerja job bersifat sementara dan dibersihkan oleh sweeper
+    # internal. Tidak dipasang sebagai volume: setelah restart, job di memori
+    # sudah hilang, jadi berkas yang tersisa hanya akan jadi sampah.
+    tmpfs:
+      - /tmp:size=256m
+    deploy:
+      resources:
+        limits:
+          memory: 2g
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
