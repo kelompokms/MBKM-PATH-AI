@@ -50,7 +50,7 @@ class Settings(BaseSettings):
     model_paid: str = Field(..., alias="PATH_AI_MODEL")
     model_free: str | None = Field(default=None, alias="PATH_AI_MODEL_FREE")
     model_image: str | None = Field(
-        default="google/gemini-3.1-flash-lite-image", alias="PATH_AI_MODEL_IMAGE"
+        default="bytedance-seed/seedream-5-0-flash", alias="PATH_AI_MODEL_IMAGE"
     )
     max_illustrations: int = Field(default=3, alias="PATH_AI_MAX_ILLUSTRATIONS")
 
