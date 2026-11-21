@@ -38,11 +38,11 @@ async def summarize_document(
     berkas_dokumen: UploadFile = File(
         description="Dokumen yang akan ditelaah: PDF, DOCX, atau TXT"
     ),
-    judul: str | None = Form(default=None, description="Judul telaah (opsional)"),
-    fokus: str | None = Form(
-        default=None, description="Hal yang ingin ditekankan (opsional)"
+    judul: str = Form(default="", description="Judul telaah (opsional)"),
+    fokus: str = Form(
+        default="", description="Hal yang ingin ditekankan (opsional)"
     ),
-    jenjang: str | None = Form(default=None, description="Mis. SMP kelas VII"),
+    jenjang: str = Form(default="", description="Mis. SMP kelas VII"),
     diagram: bool = Form(default=False),
 ) -> dict[str, object]:
     _validated(judul, fokus)
@@ -76,13 +76,13 @@ async def summarize_document(
     return job.to_dict()
 
 
-def _validated(judul: str | None, fokus: str | None) -> None:
+def _validated(judul: str, fokus: str) -> None:
     """Hanya memeriksa masukan yang diberikan.
 
     Judul dan fokus sama-sama opsional. Aturan panjangnya tetap ada bila
     diisi, sekadar menangkap salah ketik yang sangat pendek.
     """
-    if judul is not None and len(judul.strip()) < 3:
+    if judul.strip() and len(judul.strip()) < 3:
         raise InvalidRequest("Judul terlalu pendek (minimal 3 karakter).")
-    if fokus is not None and len(fokus.strip()) < 3:
+    if fokus.strip() and len(fokus.strip()) < 3:
         raise InvalidRequest("Fokus terlalu pendek (minimal 3 karakter).")

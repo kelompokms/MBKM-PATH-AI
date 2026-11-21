@@ -31,9 +31,9 @@ async def extract_answer_key(
     berkas_kunci: UploadFile = File(
         description="PDF, DOCX, atau TXT berisi kunci jawaban"
     ),
-    judul_tugas: str | None = Form(default=None),
-    kelas: str | None = Form(default=None),
-    mata_pelajaran: str | None = Form(default=None),
+    judul_tugas: str = Form(default=""),
+    kelas: str = Form(default=""),
+    mata_pelajaran: str = Form(default=""),
 ) -> dict[str, object]:
     job_runner.guard_backlog()
     job: Job = await job_store.create(

@@ -16,16 +16,13 @@ from __future__ import annotations
 import asyncio
 import json
 import zipfile
-from collections.abc import Callable, Coroutine
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Annotated, Any, Literal
+from typing import Annotated, Literal
 
-from fastapi import APIRouter, Depends, File, Form, Request, Response, UploadFile
-from fastapi.routing import APIRoute
-from starlette.datastructures import FormData
+from fastapi import APIRouter, Depends, File, Form, UploadFile
 
-from app.api.deps import CallerDep, require_teacher
+from app.api.deps import CallerDep, CleanMultipartRoute, require_teacher
 from app.core.errors import AppError, ArchiveInvalid, InvalidRequest
 from app.domain.schemas import AnswerKeyDraft
 from app.flows.ai_usage import IndicationContext, run_ai_usage_job
@@ -36,52 +33,13 @@ from app.ingest.uploads import safe_filename, save_upload
 from app.jobs import Job, job_runner, job_store
 from app.store import answer_key_store
 
-# Kolom berkas opsional yang sering dikirim sebagai string kosong ("") oleh
-# Swagger UI ketika kotak "Send empty value" dibiarkan tercentang.
-_OPTIONAL_FILE_FIELDS = frozenset(
-    {"jawaban_siswa", "jawaban_zip", "jawaban_manifest", "berkas_kunci"}
-)
-
-
-class _AsesmenRoute(APIRoute):
-    """Route khusus asesmen agar kolom berkas kosong dari Swagger UI diabaikan.
-
-    Swagger UI mencentang 'Send empty value' secara bawaan pada kolom opsional
-    multipart/form-data sehingga mengirim string kosong (""). Tanpa pembersihan
-    ini, FastAPI menolaknya dengan 422 'Expected UploadFile, received: str'.
-    """
-
-    def get_route_handler(
-        self,
-    ) -> Callable[[Request], Coroutine[Any, Any, Response]]:
-        original = super().get_route_handler()
-
-        async def handler(request: Request) -> Response:
-            content_type = request.headers.get("content-type", "")
-            if "multipart/form-data" in content_type:
-                form = await request.form()
-                cleaned = [
-                    (key, value)
-                    for key, value in form.multi_items()
-                    if not (
-                        key in _OPTIONAL_FILE_FIELDS
-                        and isinstance(value, str)
-                        and not value.strip()
-                    )
-                ]
-                request._form = FormData(cleaned)
-            return await original(request)
-
-        return handler
-
-
 # Seluruh router ini hanya untuk pengajar. Dipasang di tingkat router, bukan
 # per fungsi, supaya endpoint baru di sini ikut terlindungi tanpa perlu diingat.
 router = APIRouter(
     prefix="/v1/assessments",
     tags=["asesmen"],
     dependencies=[Depends(require_teacher)],
-    route_class=_AsesmenRoute,
+    route_class=CleanMultipartRoute,
 )
 
 _ALLOWED_ZIP = (".zip",)
@@ -427,12 +385,12 @@ async def grade(
         default=None,
         description="[Kunci — pilih salah satu] Berkas kunci jawaban PDF/DOCX/TXT",
     ),
-    answer_key_id: str | None = Form(
-        default=None,
+    answer_key_id: str = Form(
+        default="",
         description="[Kunci — pilih salah satu] ID hasil /v1/answer-keys/extract",
     ),
-    kunci_jawaban: str | None = Form(
-        default=None,
+    kunci_jawaban: str = Form(
+        default="",
         description="[Kunci — pilih salah satu] Kunci jawaban terverifikasi dalam JSON",
     ),
     on_low_confidence: Literal["stop", "continue"] = Form(
@@ -539,8 +497,8 @@ async def ai_usage(
     mata_pelajaran: str = Form(description="Nama mata pelajaran (wajib)"),
     kelas: str = Form(description="Nama kelas, mis. VII A (wajib)"),
     judul_tugas: str = Form(description="Judul tugas/ulangan (wajib)"),
-    jenjang: str | None = Form(
-        default=None, description="Jenjang pendidikan, mis. SMP kelas VII (opsional)"
+    jenjang: str = Form(
+        default="", description="Jenjang pendidikan, mis. SMP kelas VII (opsional)"
     ),
 ) -> dict[str, object]:
     _validasi_identitas(pengajar, mata_pelajaran, kelas, judul_tugas)

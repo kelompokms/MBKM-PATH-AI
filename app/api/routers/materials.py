@@ -8,13 +8,17 @@ from __future__ import annotations
 
 from fastapi import APIRouter, File, Form, UploadFile
 
-from app.api.deps import CallerDep, TeacherDep
+from app.api.deps import CallerDep, CleanMultipartRoute, TeacherDep
 from app.core.errors import AppError, InvalidRequest
 from app.flows.materials import MaterialRequest, run_material_job
 from app.ingest.uploads import save_upload
 from app.jobs import Job, job_runner, job_store
 
-router = APIRouter(prefix="/v1/materials", tags=["materi"])
+router = APIRouter(
+    prefix="/v1/materials",
+    tags=["materi"],
+    route_class=CleanMultipartRoute,
+)
 
 # `.doc` lama tidak ada di sini dengan sengaja. Lapisan pembaca berkas memang
 # menolaknya dengan pesan yang jelas, tetapi menolaknya di sini membuat job
@@ -104,14 +108,14 @@ async def explain_material(
     berkas_materi: UploadFile | None = File(
         default=None, description="PDF, DOCX, atau TXT (opsional)"
     ),
-    isi_materi: str | None = Form(
-        default=None,
+    isi_materi: str = Form(
+        default="",
         description=(
             "Teks materi yang sudah dibaca sebelumnya. Dipakai jalur pelajar "
             "supaya berkas yang sama tidak perlu diunggah berulang."
         ),
     ),
-    jenjang: str | None = Form(default=None, description="Mis. SMP kelas VII"),
+    jenjang: str = Form(default="", description="Mis. SMP kelas VII"),
     tabel: bool = Form(default=False),
     diagram: bool = Form(default=False),
     ilustrasi: bool = Form(default=False),
@@ -163,7 +167,7 @@ async def generate_material(
     berkas_materi: UploadFile | None = File(
         default=None, description="PDF, DOCX, atau TXT (opsional)"
     ),
-    jenjang: str | None = Form(default=None, description="Mis. SMP kelas VII"),
+    jenjang: str = Form(default="", description="Mis. SMP kelas VII"),
     tabel: bool = Form(default=False),
     diagram: bool = Form(default=False),
     ilustrasi: bool = Form(default=False),

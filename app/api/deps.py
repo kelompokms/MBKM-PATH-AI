@@ -21,10 +21,13 @@ yang dibuat lewat satu ejaan tidak terlihat lewat ejaan lain.
 
 from __future__ import annotations
 
+from collections.abc import Callable, Coroutine
 from dataclasses import dataclass
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 
-from fastapi import Depends, Header
+from fastapi import Depends, Header, Request, Response
+from fastapi.routing import APIRoute
+from starlette.datastructures import FormData
 
 from app.core.errors import ForbiddenForStudent, Unauthorized
 from app.core.security import is_valid_key, owner_for, owner_for_key
@@ -144,3 +147,42 @@ async def require_teacher(caller: CallerDep) -> Caller:
 
 
 TeacherDep = Annotated[Caller, Depends(require_teacher)]
+
+# Kolom berkas opsional yang sering dikirim sebagai string kosong ("") oleh
+# Swagger UI ketika kotak "Send empty value" dibiarkan tercentang.
+_OPTIONAL_FILE_FIELDS = frozenset(
+    {
+        "berkas_materi",
+        "berkas_kunci",
+        "jawaban_siswa",
+        "jawaban_zip",
+        "jawaban_manifest",
+    }
+)
+
+
+class CleanMultipartRoute(APIRoute):
+    """Abaikan string kosong dari Swagger UI ('Send empty value') pada kolom berkas."""
+
+    def get_route_handler(
+        self,
+    ) -> Callable[[Request], Coroutine[Any, Any, Response]]:
+        original = super().get_route_handler()
+
+        async def handler(request: Request) -> Response:
+            content_type = request.headers.get("content-type", "")
+            if "multipart/form-data" in content_type:
+                form = await request.form()
+                cleaned = [
+                    (key, value)
+                    for key, value in form.multi_items()
+                    if not (
+                        key in _OPTIONAL_FILE_FIELDS
+                        and isinstance(value, str)
+                        and not value.strip()
+                    )
+                ]
+                request._form = FormData(cleaned)
+            return await original(request)
+
+        return handler
