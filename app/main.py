@@ -156,12 +156,49 @@ def _register_routes(app: FastAPI) -> None:
         }
 
 
+def _tambah_format_binary(node: object) -> None:
+    """Tambahkan `format: binary` agar Swagger UI menampilkan tombol pilih berkas.
+
+    FastAPI (OpenAPI 3.1) hanya menulis `contentMediaType: application/octet-stream`
+    untuk `UploadFile`. Pada kolom array seperti `jawaban_siswa`, Swagger UI tidak
+    mengenalinya sebagai unggahan berkas dan malah menampilkan input teks biasa
+    ('Add string item') kecuali `format: binary` ikut dicantumkan.
+    """
+    if isinstance(node, dict):
+        if (
+            node.get("type") == "string"
+            and node.get("contentMediaType") == "application/octet-stream"
+        ):
+            node.setdefault("format", "binary")
+        for value in node.values():
+            _tambah_format_binary(value)
+    elif isinstance(node, list):
+        for item in node:
+            _tambah_format_binary(item)
+
+
+def _configure_openapi(app: FastAPI) -> None:
+    """Perkaya skema OpenAPI agar tombol unggah berkas tampil di Swagger UI."""
+    original_openapi = app.openapi
+
+    def custom_openapi() -> dict[str, object]:
+        if app.openapi_schema is not None:
+            return app.openapi_schema
+        schema = original_openapi()
+        _tambah_format_binary(schema)
+        app.openapi_schema = schema
+        return schema
+
+    app.openapi = custom_openapi  # type: ignore[method-assign]
+
+
 def create_app() -> FastAPI:
     """Rakit aplikasi FastAPI dari komponen-komponennya."""
     setup_logging()
     app = _build_app()
     _configure_middleware(app)
     _register_routes(app)
+    _configure_openapi(app)
     return app
 
 

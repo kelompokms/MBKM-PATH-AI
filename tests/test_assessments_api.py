@@ -813,3 +813,15 @@ async def test_swagger_send_empty_value_diabaikan(
     job = await tunggu_job(client, response.json()["job_id"])
     assert job["status"] == "done", job
     assert len(job["result"]["siswa"]) == 3
+
+
+async def test_openapi_jawaban_siswa_berformat_binary(
+    client: httpx.AsyncClient,
+) -> None:
+    """Swagger UI butuh `format: binary` agar jawaban_siswa tampil sebagai pemilih berkas."""
+    schema = (await client.get("/openapi.json")).json()
+    body = schema["components"]["schemas"]["Body_similarity_v1_assessments_similarity_post"]
+    jawaban_siswa = body["properties"]["jawaban_siswa"]
+
+    assert jawaban_siswa["type"] == "array"
+    assert jawaban_siswa["items"]["format"] == "binary"
