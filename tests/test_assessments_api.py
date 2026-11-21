@@ -642,7 +642,9 @@ async def test_koreksi_dari_berkas_per_siswa(
     assert job["result"]["jumlah_baris"] == 3
 
     isi = await client.get(f"/v1/jobs/{job['job_id']}/artifact", headers=HEADERS)
-    lembar = _buka_rekap(isi.content)["Analisa Capaian Hasil Belajar Siswa"]
+    semua = _buka_rekap(isi.content)
+    assert len(semua) == 1
+    lembar = semua["Analisa Capaian Hasil Belajar Siswa"]
 
     # Blok identitas terisi, bukan lagi tulisan contoh.
     assert lembar["A4"].value == "Pengajar : Ratna Kusumawardani"
@@ -698,7 +700,9 @@ async def test_siswa_yang_tidak_dinilai_ditulis_nol_dengan_alasan(
     assert job["result"]["jumlah_baris"] == 2
 
     isi = await client.get(f"/v1/jobs/{job['job_id']}/artifact", headers=HEADERS)
-    lembar = _buka_rekap(isi.content)["Analisa Capaian Hasil Belajar Siswa"]
+    semua = _buka_rekap(isi.content)
+    assert len(semua) == 1
+    lembar = semua["Analisa Capaian Hasil Belajar Siswa"]
 
     assert lembar["B11"].value == "Ani Pratiwi"
     assert lembar["B12"].value == "Budi Santoso"
@@ -723,7 +727,9 @@ async def test_kemiripan_dari_berkas_per_siswa(
     assert job["status"] == "done", job
 
     isi = await client.get(f"/v1/jobs/{job['job_id']}/artifact", headers=HEADERS)
-    lembar = _buka_rekap(isi.content)["Analisa Plagiasi  Siswa"]
+    semua = _buka_rekap(isi.content)
+    assert len(semua) == 1
+    lembar = semua["Analisa Plagiasi  Siswa"]
 
     assert lembar["A4"].value == "Pengajar : Ratna Kusumawardani"
     assert [lembar.cell(row=10, column=kolom).value for kolom in range(1, 5)] == [

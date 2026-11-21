@@ -65,18 +65,18 @@ _LEBAR_TOTAL = 150.0
 
 
 def build_rekap_koreksi(rekap: RekapKoreksi) -> bytes:
-    """Isi lembar koreksi: capaian hasil belajar per siswa."""
+    """Isi lembar koreksi: capaian hasil belajar per siswa (1 lembar saja)."""
     buku = _buka_template()
     lembar = _cari_lembar(buku, "koreksi")
+    _sisakan_lembar(buku, lembar)
 
-    _isi_identitas(
-        buku,
+    _isi_header(
+        lembar,
         pengajar=rekap.pengajar,
         mapel=rekap.mapel,
         kelas=rekap.kelas,
         tugas=rekap.tugas,
         deskripsi=rekap.deskripsi,
-        lembar_deskripsi=lembar,
     )
 
     baris = [
@@ -89,18 +89,18 @@ def build_rekap_koreksi(rekap: RekapKoreksi) -> bytes:
 
 
 def build_rekap_plagiasi(rekap: RekapPlagiasi) -> bytes:
-    """Isi lembar plagiasi: persentase kemiripan tertinggi tiap siswa."""
+    """Isi lembar plagiasi: persentase kemiripan tertinggi tiap siswa (1 lembar saja)."""
     buku = _buka_template()
     lembar = _cari_lembar(buku, "plagiasi")
+    _sisakan_lembar(buku, lembar)
 
-    _isi_identitas(
-        buku,
+    _isi_header(
+        lembar,
         pengajar=rekap.pengajar,
         mapel=rekap.mapel,
         kelas=rekap.kelas,
         tugas=rekap.tugas,
         deskripsi=rekap.deskripsi,
-        lembar_deskripsi=lembar,
     )
 
     baris = [
@@ -140,6 +140,13 @@ def _cari_lembar(buku: Workbook, jenis: str) -> Worksheet:
     )
 
 
+def _sisakan_lembar(buku: Workbook, dipilih: Worksheet) -> None:
+    """Hapus semua lembar lain agar berkas unduhan hanya memuat lembar fitur ini."""
+    for lembar in list(buku.worksheets):
+        if lembar is not dipilih:
+            buku.remove(lembar)
+
+
 def _simpan(buku: Workbook) -> bytes:
     buffer = io.BytesIO()
     buku.save(buffer)
@@ -169,34 +176,6 @@ def _cari_baris_tabel(lembar: Worksheet, jenis: str) -> int:
         "Baris judul tabel tidak ditemukan di template. "
         f"Kata yang dicari: {', '.join(_KATA_TABEL[jenis])}."
     )
-
-
-def _isi_identitas(
-    buku: Workbook,
-    *,
-    pengajar: str,
-    mapel: str,
-    kelas: str,
-    tugas: str,
-    deskripsi: list[str],
-    lembar_deskripsi: Worksheet,
-) -> None:
-    """Isi identitas di semua lembar, dan deskripsi hanya di lembarnya sendiri.
-
-    Identitas tetap diisi di lembar yang tidak dipakai pada pekerjaan ini,
-    supaya berkas yang diunduh tidak menyisakan tulisan contoh seperti
-    "[nama mapel]" di lembar yang kosong. Yang tidak diisi hanyalah deskripsi,
-    karena paragrafnya berbeda untuk tiap jenis analisa.
-    """
-    for lembar in buku.worksheets:
-        _isi_header(
-            lembar,
-            pengajar=pengajar,
-            mapel=mapel,
-            kelas=kelas,
-            tugas=tugas,
-            deskripsi=deskripsi if lembar is lembar_deskripsi else [],
-        )
 
 
 def _isi_header(

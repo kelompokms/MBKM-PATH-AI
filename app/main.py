@@ -14,6 +14,7 @@ from app.api.middleware import RequestSizeLimitMiddleware, SecurityHeadersMiddle
 from app.api.routers import (
     answer_keys,
     assessments,
+    chat,
     documents,
     health,
     jobs,
@@ -139,6 +140,7 @@ def _register_routes(app: FastAPI) -> None:
 
     # Urutan pendaftaran router dipertahankan seperti semula.
     app.include_router(health.router)
+    app.include_router(chat.router)
     app.include_router(materials.router)
     app.include_router(documents.router)
     app.include_router(answer_keys.router)

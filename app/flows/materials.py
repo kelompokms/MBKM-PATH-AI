@@ -14,6 +14,7 @@ from __future__ import annotations
 import asyncio
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Literal
 
 from app.core.config import settings
 from app.core.errors import InvalidRequest
@@ -29,6 +30,7 @@ from app.jobs import Job, JobState, job_store
 from app.observability.logger import get_logger
 from app.prompts.materi import build_materi_messages
 from app.render.pdf import build_material_pdf, pdf_page_count
+from app.render.pptx import PPTX_MEDIA_TYPE, build_material_pptx
 
 logger = get_logger(__name__)
 
@@ -52,6 +54,8 @@ class MaterialRequest:
     materi_text: str | None = None
     # "teacher" atau "student". Menentukan prompt yang dipakai.
     audience: str = "teacher"
+    # Format berkas keluaran: "pdf" (bawaan) atau "pptx" (khusus /generate).
+    format_keluaran: Literal["pdf", "pptx"] = "pdf"
 
 
 def resolve_flags(request: MaterialRequest) -> dict[str, bool]:
@@ -206,12 +210,26 @@ async def _write_pdf_artifact(
     return artifact, pdf_bytes
 
 
+async def _write_pptx_artifact(
+    job: Job, document: MaterialDocument, *, jenjang: str | None
+) -> tuple[Path, int]:
+    """Susun presentasi PPTX di luar event loop, lalu simpan di direktori job."""
+    pptx_bytes, slide_count = await asyncio.to_thread(
+        build_material_pptx, document, jenjang=jenjang
+    )
+    artifact = job.tmp_dir / f"{slugify(document.judul, fallback='materi')}.pptx"
+    artifact.write_bytes(pptx_bytes)
+    return artifact, slide_count
+
+
 def _build_result(
     document: MaterialDocument,
     images: list[IllustrationImage],
     flags: dict[str, bool],
     completion: Completion,
-    pdf_bytes: bytes,
+    *,
+    halaman_pdf: int | None = None,
+    jumlah_slide: int | None = None,
 ) -> dict[str, object]:
     """Ringkasan hasil untuk berkas status job.
 
@@ -219,7 +237,7 @@ def _build_result(
     yang benar-benar jadi: ilustrasi yang gagal dibuat tetap terlihat
     sebagai "diminta", supaya kegagalan tidak tersembunyi.
     """
-    return {
+    payload: dict[str, object] = {
         "judul": document.judul,
         "deskripsi_singkat": document.deskripsi_singkat,
         "jumlah_bagian": len(document.isi),
@@ -230,10 +248,14 @@ def _build_result(
             "diagram_diminta": flags["diagram"],
             "ilustrasi_diminta": flags["ilustrasi"],
         },
-        "halaman_pdf": pdf_page_count(pdf_bytes),
         "model": completion.response.model,
         "degraded": completion.degraded,
     }
+    if halaman_pdf is not None:
+        payload["halaman_pdf"] = halaman_pdf
+    if jumlah_slide is not None:
+        payload["jumlah_slide"] = jumlah_slide
+    return payload
 
 
 async def _finish(
@@ -241,6 +263,7 @@ async def _finish(
     *,
     result: dict[str, object],
     artifact: Path,
+    media_type: str,
     degraded: bool,
 ) -> None:
     await job_store.update(
@@ -250,7 +273,7 @@ async def _finish(
         message="Selesai.",
         artifact_path=artifact,
         artifact_name=artifact.name,
-        artifact_media_type="application/pdf",
+        artifact_media_type=media_type,
         result=result,
         merge_meta={
             "degraded_tasks": [Task.MATERIAL_CONTENT.value] if degraded else []
@@ -290,14 +313,32 @@ async def run_material_job(
     )
     images = await _render_illustrations(output, owner)
 
-    await job_store.update(job.id, progress=82, message="Menyusun berkas PDF.")
     document = _build_document(request, output, images)
-    artifact, pdf_bytes = await _write_pdf_artifact(job, document)
+
+    if request.format_keluaran == "pptx":
+        await job_store.update(
+            job.id, progress=82, message="Menyusun berkas presentasi PPTX."
+        )
+        artifact, slide_count = await _write_pptx_artifact(
+            job, document, jenjang=request.jenjang
+        )
+        result = _build_result(
+            document, images, flags, completion, jumlah_slide=slide_count
+        )
+        media_type = PPTX_MEDIA_TYPE
+    else:
+        await job_store.update(job.id, progress=82, message="Menyusun berkas PDF.")
+        artifact, pdf_bytes = await _write_pdf_artifact(job, document)
+        result = _build_result(
+            document, images, flags, completion, halaman_pdf=pdf_page_count(pdf_bytes)
+        )
+        media_type = "application/pdf"
 
     await _finish(
         job,
-        result=_build_result(document, images, flags, completion, pdf_bytes),
+        result=result,
         artifact=artifact,
+        media_type=media_type,
         degraded=completion.degraded,
     )
 

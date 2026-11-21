@@ -16,6 +16,7 @@ from app.api.deps import CallerDep
 from app.core.errors import JobNotReady
 from app.jobs import Job, job_store
 from app.render.excel import EXCEL_MEDIA_TYPE
+from app.render.pptx import PPTX_MEDIA_TYPE
 
 router = APIRouter(prefix="/v1/jobs", tags=["jobs"])
 
@@ -35,6 +36,7 @@ async def get_job(job_id: str, caller: CallerDep) -> dict[str, object]:
                 "application/pdf": {},
                 "application/json": {},
                 EXCEL_MEDIA_TYPE: {},
+                PPTX_MEDIA_TYPE: {},
             }
         }
     },
@@ -95,6 +97,12 @@ def _pilih_berkas(job: Job, format: str) -> tuple[Path, str]:
     if diminta == "pdf" and jenis != "application/pdf":
         raise JobNotReady(
             "Job ini tidak menghasilkan berkas PDF.",
+            details={"jenis_tersedia": jenis},
+        )
+
+    if diminta in {"pptx", "ppt"} and jenis != PPTX_MEDIA_TYPE:
+        raise JobNotReady(
+            "Job ini tidak menghasilkan berkas PowerPoint (PPTX).",
             details={"jenis_tersedia": jenis},
         )
 

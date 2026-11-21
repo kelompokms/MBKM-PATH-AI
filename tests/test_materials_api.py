@@ -428,3 +428,44 @@ async def test_pelajar_tanpa_materi_guru_ditolak(client: httpx.AsyncClient) -> N
     body = response.json()
     assert body["error"]["code"] == "invalid_request"
     assert "Materi dari guru belum ada isinya" in body["error"]["message"]
+
+
+async def test_generate_format_pptx_menghasilkan_presentasi(
+    client: httpx.AsyncClient, model_palsu
+) -> None:
+    """/v1/materials/generate dengan format_keluaran=pptx menghasilkan berkas .pptx valid."""
+    from pptx import Presentation
+
+    response = await client.post(
+        "/v1/materials/generate",
+        headers=HEADERS,
+        data={
+            "judul": "Fotosintesis",
+            "deskripsi_materi": "Materi fotosintesis untuk kelas VII",
+            "jenjang": "SMP kelas VII",
+            "kombinasi": "true",
+            "format_keluaran": "pptx",
+        },
+    )
+    assert response.status_code == 202, response.text
+    job_id = response.json()["job_id"]
+
+    job = await tunggu_job(client, job_id)
+    assert job["status"] == "done", job
+    assert job["result"]["jumlah_slide"] == 6
+    assert "halaman_pdf" not in job["result"]
+    assert job["artifact"]["name"].endswith(".pptx")
+    assert "presentationml" in job["artifact"]["media_type"]
+
+    artifact = await client.get(f"/v1/jobs/{job_id}/artifact", headers=HEADERS)
+    assert artifact.status_code == 200
+    assert artifact.content.startswith(b"PK")
+
+    prs = Presentation(io.BytesIO(artifact.content))
+    assert len(prs.slides) == 6
+
+    pdf_req = await client.get(
+        f"/v1/jobs/{job_id}/artifact?format=pdf", headers=HEADERS
+    )
+    assert pdf_req.status_code == 409
+    assert "tidak menghasilkan berkas PDF" in pdf_req.json()["error"]["message"]

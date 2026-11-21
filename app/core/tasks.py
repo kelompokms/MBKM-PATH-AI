@@ -23,6 +23,9 @@ class Task(StrEnum):
     # Fitur 1 & 2
     MATERIAL_CONTENT = "material_content"
 
+    # Chatbot pendamping belajar siswa (jawaban teks langsung, tanpa PDF)
+    STUDENT_CHAT = "student_chat"
+
     # Fitur 6 — ringkasan dokumen panjang, dua tahap
     DOC_CHUNK_SUMMARY = "doc_chunk_summary"
     DOC_SYNTHESIS = "doc_synthesis"
@@ -62,6 +65,16 @@ TASK_SPECS: dict[Task, TaskSpec] = {
         est_out_tokens=3_500,
         max_out_tokens=4_000,
         temperature=0.4,
+    ),
+    # Chatbot pendamping belajar siswa. Aman turun ke model gratis saat
+    # anggaran berbayar habis karena tidak menyentuh penilaian akademik.
+    Task.STUDENT_CHAT: TaskSpec(
+        task=Task.STUDENT_CHAT,
+        may_use_free=True,
+        est_in_tokens=2_500,
+        est_out_tokens=800,
+        max_out_tokens=1_200,
+        temperature=0.5,
     ),
     # Ringkasan satu potongan dokumen. Tidak boleh turun walau isinya hanya
     # narasi: dokumen yang sebagian potongannya diringkas oleh model berbeda

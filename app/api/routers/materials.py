@@ -6,6 +6,8 @@ materi melibatkan beberapa panggilan model dan pembuatan gambar.
 
 from __future__ import annotations
 
+from typing import Literal
+
 from fastapi import APIRouter, File, Form, UploadFile
 
 from app.api.deps import CallerDep, CleanMultipartRoute, TeacherDep
@@ -174,6 +176,10 @@ async def generate_material(
     kombinasi: bool = Form(
         default=False, description="Menyalakan tabel+diagram+ilustrasi"
     ),
+    format_keluaran: Literal["pdf", "pptx"] = Form(
+        default="pdf",
+        description="Format berkas hasil: pdf (bawaan) atau pptx (PowerPoint)",
+    ),
 ) -> dict[str, object]:
     judul = judul.strip()
     deskripsi = (deskripsi_materi or "").strip()
@@ -188,6 +194,7 @@ async def generate_material(
         diagram=diagram,
         ilustrasi=ilustrasi,
         kombinasi=kombinasi,
+        format_keluaran=format_keluaran,
     )
 
     return await _start(
