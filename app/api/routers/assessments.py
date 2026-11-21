@@ -24,6 +24,7 @@ from fastapi import APIRouter, Depends, File, Form, UploadFile
 
 from app.api.deps import CallerDep, CleanMultipartRoute, require_teacher
 from app.core.errors import AppError, ArchiveInvalid, InvalidRequest
+from app.core.llm import prefer_free_model
 from app.domain.schemas import AnswerKeyDraft
 from app.flows.ai_usage import IndicationContext, run_ai_usage_job
 from app.flows.grading import GradingContext, run_grading_job
@@ -450,6 +451,10 @@ async def similarity(
     mata_pelajaran: str = Form(description="Nama mata pelajaran (wajib)"),
     kelas: str = Form(description="Nama kelas, mis. VII A (wajib)"),
     judul_tugas: str = Form(description="Judul tugas/ulangan (wajib)"),
+    gunakan_model_gratis: bool = Form(
+        default=False,
+        description="Toggle: true untuk memakai model gratis, false untuk token berbayar",
+    ),
 ) -> dict[str, object]:
     _validasi_identitas(pengajar, mata_pelajaran, kelas, judul_tugas)
 
@@ -470,9 +475,10 @@ async def similarity(
     )
 
     async def kerja(running: Job) -> None:
-        await run_similarity_job(
-            running, owner=owner, context=context, jawaban=rangkaian
-        )
+        with prefer_free_model(gunakan_model_gratis):
+            await run_similarity_job(
+                running, owner=owner, context=context, jawaban=rangkaian
+            )
 
     job_runner.spawn(job, kerja)
     return job.to_dict()
@@ -500,6 +506,10 @@ async def ai_usage(
     jenjang: str = Form(
         default="", description="Jenjang pendidikan, mis. SMP kelas VII (opsional)"
     ),
+    gunakan_model_gratis: bool = Form(
+        default=False,
+        description="Toggle: true untuk memakai model gratis, false untuk token berbayar",
+    ),
 ) -> dict[str, object]:
     _validasi_identitas(pengajar, mata_pelajaran, kelas, judul_tugas)
 
@@ -521,9 +531,10 @@ async def ai_usage(
     )
 
     async def kerja(running: Job) -> None:
-        await run_ai_usage_job(
-            running, owner=owner, context=context, jawaban=rangkaian
-        )
+        with prefer_free_model(gunakan_model_gratis):
+            await run_ai_usage_job(
+                running, owner=owner, context=context, jawaban=rangkaian
+            )
 
     job_runner.spawn(job, kerja)
     return job.to_dict()

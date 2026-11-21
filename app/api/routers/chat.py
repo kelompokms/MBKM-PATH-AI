@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Literal
 
 from fastapi import APIRouter
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.api.deps import CallerDep
 from app.core.errors import InvalidRequest
@@ -24,6 +24,18 @@ class ChatMessage(BaseModel):
 
 
 class ChatRequestBody(BaseModel):
+    model_config = ConfigDict(
+        json_schema_extra={
+            "example": {
+                "pesan": "",
+                "riwayat": [],
+                "isi_materi": "",
+                "jenjang": "",
+                "gunakan_model_gratis": False,
+            }
+        }
+    )
+
     pesan: str = Field(
         min_length=1,
         max_length=4000,
@@ -46,11 +58,16 @@ class ChatRequestBody(BaseModel):
         max_length=80,
         description="Jenjang pendidikan siswa, mis. SMP kelas VII (opsional)",
     )
+    gunakan_model_gratis: bool = Field(
+        default=False,
+        description="Toggle: true untuk memakai model gratis, false untuk token berbayar",
+    )
 
 
 class ChatResponseBody(BaseModel):
     jawaban: str
     model: str
+    route: Literal["paid", "free"]
     degraded: bool
     berbasis_materi: bool
 
@@ -85,11 +102,13 @@ async def chat_with_ai(
         task=Task.STUDENT_CHAT,
         messages=messages,
         owner=caller.fingerprint,
+        prefer_free=body.gunakan_model_gratis,
     )
 
     return ChatResponseBody(
         jawaban=completion.content.strip(),
         model=completion.response.model,
+        route=completion.route,
         degraded=completion.degraded,
         berbasis_materi=bool(body.isi_materi.strip()),
     )

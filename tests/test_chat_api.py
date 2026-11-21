@@ -117,3 +117,27 @@ async def test_chat_pesan_kosong_ditolak(client: httpx.AsyncClient) -> None:
     )
     assert response.status_code == 400
     assert response.json()["error"]["code"] == "invalid_request"
+
+
+async def test_toggle_model_gratis_memilih_rute_free_dan_tidak_untuk_penilaian(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Toggle `prefer_free` hanya mengarahkan task non-penilaian ke model gratis."""
+    from app.core.llm import prefer_free_model
+
+    monkeypatch.setattr(settings, "model_free", "google/gemma-4-26b-a4b-it:free")
+
+    with prefer_free_model(True):
+        route_chat = await llm._decide_route(
+            Task.STUDENT_CHAT, "owner-1", 1000, prefer_free=True
+        )
+        route_materi = await llm._decide_route(
+            Task.MATERIAL_CONTENT, "owner-1", 1000, prefer_free=True
+        )
+        route_grade = await llm._decide_route(
+            Task.ITEM_GRADE, "owner-1", 1000, prefer_free=True
+        )
+
+    assert route_chat == "free"
+    assert route_materi == "free"
+    assert route_grade == "paid"

@@ -62,8 +62,8 @@ TASK_SPECS: dict[Task, TaskSpec] = {
         task=Task.MATERIAL_CONTENT,
         may_use_free=False,
         est_in_tokens=6_000,
-        est_out_tokens=3_500,
-        max_out_tokens=4_000,
+        est_out_tokens=4_000,
+        max_out_tokens=8_000,
         temperature=0.4,
     ),
     # Chatbot pendamping belajar siswa. Aman turun ke model gratis saat

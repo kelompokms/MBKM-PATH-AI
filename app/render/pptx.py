@@ -241,45 +241,55 @@ def _add_section_slide(
 def _add_table_slide(
     prs: Any, layout: Any, section_title: str, table_spec: TableSpec
 ) -> None:
-    slide = prs.slides.add_slide(layout)
-    judul = table_spec.judul or f"Tabel — {section_title}"
-    _add_header(slide, judul, subtitle=section_title)
+    rows_per_slide = 10
+    chunks = [
+        table_spec.baris[i : i + rows_per_slide]
+        for i in range(0, max(1, len(table_spec.baris)), rows_per_slide)
+    ]
 
-    # Batasi baris agar tabel tetap terbaca nyaman dalam satu slide.
-    rows_data = table_spec.baris[:10]
-    n_rows = 1 + len(rows_data)
-    n_cols = len(table_spec.kolom)
+    for page_idx, rows_data in enumerate(chunks, start=1):
+        slide = prs.slides.add_slide(layout)
+        base_judul = table_spec.judul or f"Tabel — {section_title}"
+        judul = (
+            f"{base_judul} ({page_idx}/{len(chunks)})"
+            if len(chunks) > 1
+            else base_judul
+        )
+        _add_header(slide, judul, subtitle=section_title)
 
-    table_height = min(Inches(5.2), Inches(0.55 * n_rows))
-    shape = slide.shapes.add_table(
-        n_rows, n_cols, _MARGIN_X, Inches(1.55), _CONTENT_W, table_height
-    )
-    table = shape.table
+        n_rows = 1 + len(rows_data)
+        n_cols = len(table_spec.kolom)
 
-    for col_idx, header_text in enumerate(table_spec.kolom):
-        cell = table.cell(0, col_idx)
-        cell.fill.solid()
-        cell.fill.fore_color.rgb = _ACCENT
-        cell.vertical_anchor = MSO_ANCHOR.MIDDLE
-        p = cell.text_frame.paragraphs[0]
-        p.text = str(header_text)
-        p.font.name = _FONT
-        p.font.size = Pt(14)
-        p.font.bold = True
-        p.font.color.rgb = _WHITE
+        table_height = min(Inches(5.2), Inches(0.55 * n_rows))
+        shape = slide.shapes.add_table(
+            n_rows, n_cols, _MARGIN_X, Inches(1.55), _CONTENT_W, table_height
+        )
+        table = shape.table
 
-    for row_idx, row in enumerate(rows_data, start=1):
-        bg = _SOFT if row_idx % 2 == 0 else _WHITE
-        for col_idx in range(n_cols):
-            cell = table.cell(row_idx, col_idx)
+        for col_idx, header_text in enumerate(table_spec.kolom):
+            cell = table.cell(0, col_idx)
             cell.fill.solid()
-            cell.fill.fore_color.rgb = bg
+            cell.fill.fore_color.rgb = _ACCENT
             cell.vertical_anchor = MSO_ANCHOR.MIDDLE
             p = cell.text_frame.paragraphs[0]
-            p.text = str(row[col_idx]) if col_idx < len(row) else ""
+            p.text = str(header_text)
             p.font.name = _FONT
-            p.font.size = Pt(13)
-            p.font.color.rgb = _INK
+            p.font.size = Pt(14)
+            p.font.bold = True
+            p.font.color.rgb = _WHITE
+
+        for row_idx, row in enumerate(rows_data, start=1):
+            bg = _SOFT if row_idx % 2 == 0 else _WHITE
+            for col_idx in range(n_cols):
+                cell = table.cell(row_idx, col_idx)
+                cell.fill.solid()
+                cell.fill.fore_color.rgb = bg
+                cell.vertical_anchor = MSO_ANCHOR.MIDDLE
+                p = cell.text_frame.paragraphs[0]
+                p.text = str(row[col_idx]) if col_idx < len(row) else ""
+                p.font.name = _FONT
+                p.font.size = Pt(13)
+                p.font.color.rgb = _INK
 
 
 def _add_diagram_slide(prs: Any, layout: Any, diagram: DiagramSpec) -> None:
@@ -288,7 +298,7 @@ def _add_diagram_slide(prs: Any, layout: Any, diagram: DiagramSpec) -> None:
     jenis_label = "Peta Pikiran" if diagram.jenis == "peta_pikiran" else "Diagram Alur"
     _add_header(slide, judul, subtitle=jenis_label)
 
-    nodes = diagram.nodes[:12]
+    nodes = diagram.nodes
     cols = min(4, max(2, len(nodes)))
     rows = (len(nodes) + cols - 1) // cols
 

@@ -87,8 +87,6 @@ def _enforce_flags(output: MaterialOutput, flags: dict[str, bool]) -> MaterialOu
         output.diagram = None
     if not flags.get("ilustrasi"):
         output.ilustrasi = []
-    else:
-        output.ilustrasi = output.ilustrasi[: settings.max_illustrations]
     return output
 
 

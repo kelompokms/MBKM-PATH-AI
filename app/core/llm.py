@@ -35,6 +35,9 @@ import binascii
 import io
 import json
 import time
+from collections.abc import Iterator
+from contextlib import contextmanager
+from contextvars import ContextVar
 from dataclasses import dataclass, field
 from typing import Any, Literal, TypeVar
 
@@ -47,6 +50,7 @@ from app.core.config import settings
 from app.core.errors import (
     AppError,
     BudgetExhausted,
+    InvalidRequest,
     LLMAuthError,
     LLMBadResponse,
     LLMCreditsExhausted,
@@ -65,6 +69,35 @@ logger = get_logger(__name__)
 
 SchemaT = TypeVar("SchemaT", bound=BaseModel)
 Route = Literal["paid", "free"]
+
+# Toggle per-request dari pengguna untuk memakai model gratis pada fitur
+# non-penilaian. Disimpan di ContextVar agar otomatis terbawa ke seluruh
+# panggilan LLM di dalam satu job tanpa mengubah tanda tangan setiap modul flow.
+_PREFER_FREE: ContextVar[bool] = ContextVar("path_ai_prefer_free", default=False)
+
+# Task non-penilaian yang diizinkan memakai model gratis saat pengguna menyalakan
+# toggle `gunakan_model_gratis=true`. Task koreksi nilai (`KEY_EXTRACT`,
+# `ITEM_GRADE`) dan OCR (`PAGE_OCR`) sengaja TIDAK ada di sini.
+_FREE_TOGGLE_TASKS = frozenset(
+    {
+        Task.STUDENT_CHAT,
+        Task.MATERIAL_CONTENT,
+        Task.DOC_CHUNK_SUMMARY,
+        Task.DOC_SYNTHESIS,
+        Task.PAIR_JUDGE,
+        Task.AI_DETECT,
+    }
+)
+
+
+@contextmanager
+def prefer_free_model(enabled: bool) -> Iterator[None]:
+    """Aktifkan atau matikan pilihan model gratis untuk konteks async saat ini."""
+    token = _PREFER_FREE.set(bool(enabled))
+    try:
+        yield
+    finally:
+        _PREFER_FREE.reset(token)
 
 # Status yang layak dicoba ulang. 400/404/422 tidak termasuk: permintaan
 # yang salah bentuk tidak akan berhasil walau diulang.
@@ -378,8 +411,28 @@ class LLMGateway:
     # Pemilihan model
     # ------------------------------------------------------------------
 
-    async def _decide_route(self, task: Task, owner: str, estimate: int) -> Route:
-        """Tentukan rute berdasarkan sisa anggaran dan boleh-tidaknya task turun."""
+    async def _decide_route(
+        self, task: Task, owner: str, estimate: int, *, prefer_free: bool = False
+    ) -> Route:
+        """Tentukan rute berdasarkan toggle pengguna, sisa anggaran, dan jenis task."""
+        if prefer_free and task in _FREE_TOGGLE_TASKS:
+            if not settings.model_free:
+                raise InvalidRequest(
+                    "Model gratis belum diaktifkan di server (PATH_AI_MODEL_FREE kosong)."
+                )
+            available = await free_quota.available(1)
+            if available is False:
+                raise BudgetExhausted(
+                    "Kuota model gratis untuk hari ini sudah habis. "
+                    "Matikan toggle model gratis untuk memakai anggaran berbayar."
+                )
+            logger.info(
+                "Memakai model gratis (pilihan pengguna)",
+                task=task.value,
+                owner=owner,
+            )
+            return "free"
+
         spec = spec_for(task)
         can_go_free = spec.may_use_free and bool(settings.model_free)
 
@@ -407,14 +460,16 @@ class LLMGateway:
         return "free"
 
     async def _resolve_route_with_reservation(
-        self, task: Task, owner: str, estimate: int
+        self, task: Task, owner: str, estimate: int, *, prefer_free: bool = False
     ) -> tuple[Route, int]:
         """Tentukan rute final sekaligus kunci jatah anggaran bila berbayar.
 
         Mengembalikan `(rute, jatah)`. Jatah bernilai 0 berarti tidak ada
         apa pun yang perlu dilepas pemanggil.
         """
-        route = await self._decide_route(task, owner, estimate)
+        route = await self._decide_route(
+            task, owner, estimate, prefer_free=prefer_free
+        )
         if route == "free":
             return "free", 0
 
@@ -424,7 +479,9 @@ class LLMGateway:
         # Balapan dengan job lain: anggaran menyusut di antara pemeriksaan
         # dan reserve. Ulangi keputusan sekali, dan bila anggaran memang
         # sudah habis untuk task kritikal, berhenti dengan pesan yang jelas.
-        route = await self._decide_route(task, owner, estimate)
+        route = await self._decide_route(
+            task, owner, estimate, prefer_free=prefer_free
+        )
         if route == "paid":
             raise BudgetExhausted()
         return "free", 0
@@ -558,6 +615,7 @@ class LLMGateway:
         max_tokens: int | None = None,
         response_format: dict[str, Any] | None = None,
         extra_body: dict[str, Any] | None = None,
+        prefer_free: bool | None = None,
     ) -> Completion:
         """Satu panggilan lengkap: pilih model, kunci anggaran, catat pemakaian.
 
@@ -566,6 +624,7 @@ class LLMGateway:
         """
         spec = spec_for(task)
         estimate = estimate_messages_tokens(messages) + spec.est_out_tokens
+        want_free = _PREFER_FREE.get() if prefer_free is None else prefer_free
 
         request = ChatRequest(
             messages=messages,
@@ -575,7 +634,9 @@ class LLMGateway:
             extra_body=extra_body,
         )
 
-        route, reserved = await self._resolve_route_with_reservation(task, owner, estimate)
+        route, reserved = await self._resolve_route_with_reservation(
+            task, owner, estimate, prefer_free=want_free
+        )
 
         if route == "paid":
             model = settings.model_paid
@@ -671,8 +732,13 @@ class LLMGateway:
                 {
                     "role": "user",
                     "content": (
-                        f"{prompt}\n\nRasio aspek: {aspect}. "
-                        "Tanpa teks apa pun di dalam gambar."
+                        f"{prompt}\n\n"
+                        "Style: high-resolution educational textbook illustration, "
+                        "clean modern vector-editorial look, sharp focus, accurate "
+                        "subject details, balanced composition, bright uncluttered "
+                        f"background. Aspect ratio: {aspect}. "
+                        "Strictly no text, no letters, no numbers, no labels, "
+                        "no watermarks."
                     ),
                 }
             ],

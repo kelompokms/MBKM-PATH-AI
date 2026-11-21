@@ -12,6 +12,7 @@ from fastapi import APIRouter, File, Form, UploadFile
 
 from app.api.deps import CallerDep, CleanMultipartRoute, TeacherDep
 from app.core.errors import AppError, InvalidRequest
+from app.core.llm import prefer_free_model
 from app.flows.materials import MaterialRequest, run_material_job
 from app.ingest.uploads import save_upload
 from app.jobs import Job, job_runner, job_store
@@ -34,6 +35,7 @@ async def _start(
     request: MaterialRequest,
     berkas_materi: UploadFile | None,
     kind: str,
+    gunakan_model_gratis: bool = False,
 ) -> dict[str, object]:
     """Buat job, simpan unggahan, lalu jalankan pekerjaannya.
 
@@ -57,7 +59,8 @@ async def _start(
         raise
 
     async def kerja(running: Job) -> None:
-        await run_material_job(running, request=request, owner=owner)
+        with prefer_free_model(gunakan_model_gratis):
+            await run_material_job(running, request=request, owner=owner)
 
     job_runner.spawn(job, kerja)
     return job.to_dict()
@@ -124,6 +127,10 @@ async def explain_material(
     kombinasi: bool = Form(
         default=False, description="Menyalakan tabel+diagram+ilustrasi"
     ),
+    gunakan_model_gratis: bool = Form(
+        default=False,
+        description="Toggle: true untuk memakai model gratis, false untuk token berbayar",
+    ),
 ) -> dict[str, object]:
     pertanyaan = pertanyaan.strip()
     deskripsi = (deskripsi_materi or "").strip()
@@ -151,6 +158,7 @@ async def explain_material(
         request=request,
         berkas_materi=berkas_materi,
         kind="materi_penjelasan",
+        gunakan_model_gratis=gunakan_model_gratis,
     )
 
 
@@ -180,6 +188,10 @@ async def generate_material(
         default="pdf",
         description="Format berkas hasil: pdf (bawaan) atau pptx (PowerPoint)",
     ),
+    gunakan_model_gratis: bool = Form(
+        default=False,
+        description="Toggle: true untuk memakai model gratis, false untuk token berbayar",
+    ),
 ) -> dict[str, object]:
     judul = judul.strip()
     deskripsi = (deskripsi_materi or "").strip()
@@ -202,4 +214,5 @@ async def generate_material(
         request=request,
         berkas_materi=berkas_materi,
         kind="materi_pembuatan",
+        gunakan_model_gratis=gunakan_model_gratis,
     )

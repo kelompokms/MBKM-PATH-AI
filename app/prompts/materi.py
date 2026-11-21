@@ -15,26 +15,31 @@ Aturan yang WAJIB dipatuhi:
    dirinya sendiri. Keluaran hanya objek JSON.
 4. Struktur materi harus runtut: pengantar, penjelasan bertahap, lalu
    kesimpulan yang merangkum butir-butir utama.
-5. Panjang wajar untuk satu pertemuan: 3 sampai 5 bagian isi. Setiap bagian
-   berisi 1 sampai 3 paragraf dan boleh memiliki poin ringkas. Bila bahan
-   rujukan yang diberikan panjang, susun 6 sampai 8 bagian dan bahas seluruh
-   isinya dari awal sampai akhir, bukan hanya pengantarnya. Jangan menghabiskan
-   ruang untuk menyebutkan judul, penulis, atau penerbit dokumennya.
-6. Bila pengguna meminta tabel, buat tabel hanya jika materinya memang
-   berbentuk perbandingan atau daftar berkategori. Tabel 2 sampai 4 kolom,
-   maksimal 12 baris. Isi sel berupa teks pendek, bukan kalimat panjang.
+5. Tentukan sendiri jumlah bagian, panjang paragraf, jumlah kalimat, serta
+   poin-poin secara bebas mengikuti kebutuhan topik dan permintaan pengguna.
+   Bila bahan rujukan yang diberikan panjang, bahas seluruh isinya dari awal
+   sampai akhir, bukan hanya pengantarnya. Jangan menghabiskan ruang untuk
+   menyebutkan judul, penulis, atau penerbit dokumennya.
+6. Bila pengguna meminta tabel, buat tabel sebanyak dan selengkap yang sesuai
+   dengan materi dan permintaan pengguna. Isi sel berupa teks yang rapi dan
+   mudah dibaca.
 7. Bila pengguna meminta diagram, pilih "alur" untuk proses/tahapan dan
-   "peta_pikiran" untuk konsep yang bercabang. Gunakan 3 sampai 10 node.
-   Setiap node memiliki "id" pendek tanpa spasi (huruf kecil, mis. "tahap1")
-   dan "label" maksimal 6 kata. Sisi menghubungkan id yang benar-benar ada.
-8. Bila pengguna meminta ilustrasi, tulis "prompt_gambar" dalam BAHASA INGGRIS
-   yang menggambarkan satu adegan konkret dan mudah digambar. Jangan meminta
-   teks, huruf, angka, diagram, atau grafik di dalam gambar. Maksimal 3
-   ilustrasi, dan hanya yang benar-benar membantu pemahaman.
+   "peta_pikiran" untuk konsep yang bercabang. Tentukan jumlah node dan sisi
+   secukupnya sesuai kompleksitas materi. Setiap node memiliki "id" pendek
+   tanpa spasi (huruf kecil, mis. "tahap1") dan "label" yang ringkas dan
+   jelas. Sisi menghubungkan id yang benar-benar ada.
+8. Bila pengguna meminta ilustrasi, buat jumlah ilustrasi yang sesuai dengan
+   permintaan pengguna dan kebutuhan visual materi. Tulis "prompt_gambar"
+   dalam BAHASA INGGRIS yang sangat spesifik dan relevan langsung dengan
+   konsep materi yang dibahas: jelaskan objek utama, proses atau adegan
+   konkret yang terjadi, detail anatomi/sains/lingkungan yang akurat,
+   komposisi yang bersih dan jelas, pencahayaan terang, serta gaya ilustrasi
+   buku pelajaran/ensiklopedia modern yang rapi. Jangan meminta teks, huruf,
+   angka, label, atau tanda air (watermark) di dalam gambar.
 9. Bila sebuah elemen tidak diminta, isi dengan null atau array kosong.
    Jangan menyisipkan elemen yang tidak diminta.
-10. "deskripsi_singkat" adalah 2 sampai 3 kalimat yang menjelaskan cakupan
-    materi, bukan pengulangan judul.
+10. "deskripsi_singkat" menjelaskan cakupan dan inti materi secara jelas,
+    bukan sekadar pengulangan judul.
 
 Bentuk keluaran JSON:
 {

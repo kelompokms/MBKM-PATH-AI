@@ -16,6 +16,7 @@ from fastapi import APIRouter, File, Form, UploadFile
 
 from app.api.deps import TeacherDep
 from app.core.errors import AppError, InvalidRequest
+from app.core.llm import prefer_free_model
 from app.flows.documents_summary import DocumentRequest, run_summarize_job
 from app.ingest.uploads import save_upload
 from app.jobs import Job, job_runner, job_store
@@ -44,6 +45,10 @@ async def summarize_document(
     ),
     jenjang: str = Form(default="", description="Mis. SMP kelas VII"),
     diagram: bool = Form(default=False),
+    gunakan_model_gratis: bool = Form(
+        default=False,
+        description="Toggle: true untuk memakai model gratis, false untuk token berbayar",
+    ),
 ) -> dict[str, object]:
     _validated(judul, fokus)
 
@@ -70,7 +75,10 @@ async def summarize_document(
     )
 
     async def kerja(running: Job) -> None:
-        await run_summarize_job(running, request=request, owner=caller.fingerprint)
+        with prefer_free_model(gunakan_model_gratis):
+            await run_summarize_job(
+                running, request=request, owner=caller.fingerprint
+            )
 
     job_runner.spawn(job, kerja)
     return job.to_dict()

@@ -43,8 +43,8 @@ class TableSpec(BaseModel):
     """Tabel yang dibuat model. Isi sel adalah teks, bukan angka terhitung."""
 
     judul: str = ""
-    kolom: list[str] = Field(min_length=2, max_length=6)
-    baris: list[list[str]] = Field(default_factory=list, max_length=40)
+    kolom: list[str] = Field(min_length=2)
+    baris: list[list[str]] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def _rapikan_baris(self) -> TableSpec:
@@ -58,21 +58,21 @@ class TableSpec(BaseModel):
 
 
 class DiagramNode(BaseModel):
-    id: str = Field(min_length=1, max_length=24)
-    label: str = Field(min_length=1, max_length=60)
+    id: str = Field(min_length=1, max_length=40)
+    label: str = Field(min_length=1, max_length=120)
 
 
 class DiagramEdge(BaseModel):
-    dari: str = Field(min_length=1, max_length=24)
-    ke: str = Field(min_length=1, max_length=24)
-    label: str = Field(default="", max_length=40)
+    dari: str = Field(min_length=1, max_length=40)
+    ke: str = Field(min_length=1, max_length=40)
+    label: str = Field(default="", max_length=80)
 
 
 class DiagramSpec(BaseModel):
     jenis: DiagramKind = "alur"
     judul: str = ""
-    nodes: list[DiagramNode] = Field(min_length=2, max_length=14)
-    edges: list[DiagramEdge] = Field(default_factory=list, max_length=32)
+    nodes: list[DiagramNode] = Field(min_length=2)
+    edges: list[DiagramEdge] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def _buang_sisi_menggantung(self) -> DiagramSpec:
@@ -91,25 +91,25 @@ class DiagramSpec(BaseModel):
 
 
 class IllustrationSpec(BaseModel):
-    judul: str = Field(default="", max_length=80)
-    prompt_gambar: str = Field(min_length=10, max_length=600)
-    keterangan: str = Field(default="", max_length=200)
+    judul: str = Field(default="", max_length=160)
+    prompt_gambar: str = Field(min_length=10, max_length=2000)
+    keterangan: str = Field(default="", max_length=400)
 
 
 class MaterialSection(BaseModel):
-    judul: str = Field(min_length=3, max_length=120)
-    paragraf: list[str] = Field(default_factory=list, max_length=8)
-    poin: list[str] = Field(default_factory=list, max_length=12)
+    judul: str = Field(min_length=3, max_length=200)
+    paragraf: list[str] = Field(default_factory=list)
+    poin: list[str] = Field(default_factory=list)
     tabel: TableSpec | None = None
 
 
 class MaterialOutput(BaseModel):
-    judul: str = Field(min_length=3, max_length=140)
-    deskripsi_singkat: str = Field(min_length=10, max_length=600)
-    isi: list[MaterialSection] = Field(min_length=1, max_length=8)
-    kesimpulan: list[str] = Field(min_length=1, max_length=6)
+    judul: str = Field(min_length=3, max_length=200)
+    deskripsi_singkat: str = Field(min_length=10)
+    isi: list[MaterialSection] = Field(min_length=1)
+    kesimpulan: list[str] = Field(min_length=1)
     diagram: DiagramSpec | None = None
-    ilustrasi: list[IllustrationSpec] = Field(default_factory=list, max_length=3)
+    ilustrasi: list[IllustrationSpec] = Field(default_factory=list)
 
 
 # --------------------------------------------------------------------------- #
