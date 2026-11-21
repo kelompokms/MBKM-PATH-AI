@@ -791,3 +791,25 @@ async def test_dua_cara_pengiriman_sekaligus_ditolak(
 
     assert response.status_code == 400
     assert "salah satu cara" in response.json()["error"]["message"]
+
+
+async def test_swagger_send_empty_value_diabaikan(
+    client: httpx.AsyncClient, model_asesmen
+) -> None:
+    """Swagger UI mengirim string kosong untuk kolom berkas opsional; harus tetap jalan."""
+    response = await client.post(
+        "/v1/assessments/similarity",
+        headers=HEADERS,
+        data={
+            **IDENTITAS,
+            "jawaban_siswa": "",
+            "jawaban_manifest": "",
+            "email": "",
+            "nama": "",
+        },
+        files={"jawaban_zip": ("jawaban.zip", _zip_bytes(), "application/zip")},
+    )
+    assert response.status_code == 202, response.text
+    job = await tunggu_job(client, response.json()["job_id"])
+    assert job["status"] == "done", job
+    assert len(job["result"]["siswa"]) == 3

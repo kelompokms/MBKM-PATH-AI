@@ -16,11 +16,14 @@ from __future__ import annotations
 import asyncio
 import json
 import zipfile
+from collections.abc import Callable, Coroutine
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Annotated, Literal
+from typing import Annotated, Any, Literal
 
-from fastapi import APIRouter, Depends, File, Form, UploadFile
+from fastapi import APIRouter, Depends, File, Form, Request, Response, UploadFile
+from fastapi.routing import APIRoute
+from starlette.datastructures import FormData
 
 from app.api.deps import CallerDep, require_teacher
 from app.core.errors import AppError, ArchiveInvalid, InvalidRequest
@@ -33,12 +36,52 @@ from app.ingest.uploads import safe_filename, save_upload
 from app.jobs import Job, job_runner, job_store
 from app.store import answer_key_store
 
+# Kolom berkas opsional yang sering dikirim sebagai string kosong ("") oleh
+# Swagger UI ketika kotak "Send empty value" dibiarkan tercentang.
+_OPTIONAL_FILE_FIELDS = frozenset(
+    {"jawaban_siswa", "jawaban_zip", "jawaban_manifest", "berkas_kunci"}
+)
+
+
+class _AsesmenRoute(APIRoute):
+    """Route khusus asesmen agar kolom berkas kosong dari Swagger UI diabaikan.
+
+    Swagger UI mencentang 'Send empty value' secara bawaan pada kolom opsional
+    multipart/form-data sehingga mengirim string kosong (""). Tanpa pembersihan
+    ini, FastAPI menolaknya dengan 422 'Expected UploadFile, received: str'.
+    """
+
+    def get_route_handler(
+        self,
+    ) -> Callable[[Request], Coroutine[Any, Any, Response]]:
+        original = super().get_route_handler()
+
+        async def handler(request: Request) -> Response:
+            content_type = request.headers.get("content-type", "")
+            if "multipart/form-data" in content_type:
+                form = await request.form()
+                cleaned = [
+                    (key, value)
+                    for key, value in form.multi_items()
+                    if not (
+                        key in _OPTIONAL_FILE_FIELDS
+                        and isinstance(value, str)
+                        and not value.strip()
+                    )
+                ]
+                request._form = FormData(cleaned)
+            return await original(request)
+
+        return handler
+
+
 # Seluruh router ini hanya untuk pengajar. Dipasang di tingkat router, bukan
 # per fungsi, supaya endpoint baru di sini ikut terlindungi tanpa perlu diingat.
 router = APIRouter(
     prefix="/v1/assessments",
     tags=["asesmen"],
     dependencies=[Depends(require_teacher)],
+    route_class=_AsesmenRoute,
 )
 
 _ALLOWED_ZIP = (".zip",)
@@ -75,27 +118,43 @@ class JawabanForm:
 
 
 async def jawaban_form(
-    jawaban_siswa: list[UploadFile] | None = File(
-        default=None, description="Satu berkas jawaban per siswa, boleh berulang"
-    ),
-    email: list[str] | None = Form(
-        default=None, description="Email siswa, sejajar dengan jawaban_siswa"
-    ),
-    nama: list[str] | None = Form(
-        default=None, description="Nama siswa, sejajar dengan jawaban_siswa"
-    ),
     jawaban_zip: UploadFile | None = File(
-        default=None, description="Cara lain: satu ZIP berisi manifest.csv"
+        default=None,
+        description=(
+            "[Cara 1 — ZIP, paling mudah] 1 berkas ZIP berisi manifest.csv dan "
+            "berkas jawaban siswa (.pdf/.docx/.txt). Bila ini diisi, kolom Cara 2 "
+            "di bawah tidak perlu diisi."
+        ),
     ),
     jawaban_manifest: UploadFile | None = File(
-        default=None, description="manifest.csv bila di luar ZIP"
+        default=None,
+        description=(
+            "[Cara 1 — Opsional] Unggah manifest.csv terpisah hanya jika "
+            "manifest.csv tidak berada di dalam ZIP."
+        ),
+    ),
+    jawaban_siswa: list[UploadFile] = File(
+        default=[],
+        description=(
+            "[Cara 2 — Per siswa] Satu berkas jawaban (.pdf/.docx/.txt) per siswa, "
+            "sejajar dengan kolom email dan nama. Jangan diisi bersamaan dengan "
+            "jawaban_zip."
+        ),
+    ),
+    email: list[str] = Form(
+        default=[],
+        description="[Cara 2 — Per siswa] Email siswa, sejajar dengan jawaban_siswa.",
+    ),
+    nama: list[str] = Form(
+        default=[],
+        description="[Cara 2 — Per siswa] Nama siswa, sejajar dengan jawaban_siswa.",
     ),
 ) -> JawabanForm:
     """Kumpulkan kolom jawaban siswa menjadi satu nilai."""
     return JawabanForm(
-        berkas=jawaban_siswa or [],
-        email=email or [],
-        nama=nama or [],
+        berkas=jawaban_siswa,
+        email=email,
+        nama=nama,
         zip_berkas=jawaban_zip,
         manifest_berkas=jawaban_manifest,
     )
@@ -343,25 +402,43 @@ def _spawn_grading(
     "/grade",
     status_code=202,
     summary="Koreksi jawaban siswa dengan AI",
+    description=(
+        "Isi 4 kolom identitas wajib (`pengajar`, `mata_pelajaran`, `kelas`, "
+        "`judul_tugas`), lalu:\n\n"
+        "1. **Pilih salah satu cara kirim jawaban:**\n"
+        "   - **Cara 1 (ZIP):** unggah `jawaban_zip` berisi `manifest.csv` + berkas "
+        "siswa.\n"
+        "   - **Cara 2 (Per siswa):** unggah `jawaban_siswa` beserta `email` dan `nama`.\n"
+        "2. **Pilih salah satu sumber kunci jawaban:**\n"
+        "   - `berkas_kunci` (PDF/DOCX/TXT), **atau**\n"
+        "   - `answer_key_id` (dari `/v1/answer-keys/extract`), **atau**\n"
+        "   - `kunci_jawaban` (JSON terverifikasi)."
+    ),
     response_description="Job yang sedang diproses",
 )
 async def grade(
     caller: CallerDep,
     jawaban: JawabanDep,
-    pengajar: str = Form(),
-    mata_pelajaran: str = Form(),
-    kelas: str = Form(),
-    judul_tugas: str = Form(),
+    pengajar: str = Form(description="Nama pengajar (wajib)"),
+    mata_pelajaran: str = Form(description="Nama mata pelajaran (wajib)"),
+    kelas: str = Form(description="Nama kelas, mis. VII A (wajib)"),
+    judul_tugas: str = Form(description="Judul tugas/ulangan (wajib)"),
     berkas_kunci: UploadFile | None = File(
-        default=None, description="Kunci jawaban PDF/DOCX/TXT"
+        default=None,
+        description="[Kunci — pilih salah satu] Berkas kunci jawaban PDF/DOCX/TXT",
     ),
     answer_key_id: str | None = Form(
-        default=None, description="ID dari /v1/answer-keys/extract"
+        default=None,
+        description="[Kunci — pilih salah satu] ID hasil /v1/answer-keys/extract",
     ),
     kunci_jawaban: str | None = Form(
-        default=None, description="Kunci yang sudah diperiksa, dalam bentuk JSON"
+        default=None,
+        description="[Kunci — pilih salah satu] Kunci jawaban terverifikasi dalam JSON",
     ),
-    on_low_confidence: Literal["stop", "continue"] = Form(default="stop"),
+    on_low_confidence: Literal["stop", "continue"] = Form(
+        default="stop",
+        description="Tindakan bila keyakinan ekstraksi kunci rendah: stop atau continue",
+    ),
 ) -> dict[str, object]:
     _validasi_identitas(pengajar, mata_pelajaran, kelas, judul_tugas)
 
@@ -399,15 +476,22 @@ async def grade(
     "/similarity",
     status_code=202,
     summary="Periksa kemiripan jawaban antarsiswa",
+    description=(
+        "Isi 4 kolom identitas wajib (`pengajar`, `mata_pelajaran`, `kelas`, "
+        "`judul_tugas`), lalu pilih **salah satu** cara kirim jawaban:\n\n"
+        "- **Cara 1 (ZIP):** unggah `jawaban_zip` berisi `manifest.csv` + berkas siswa "
+        "(minimal 2 siswa).\n"
+        "- **Cara 2 (Per siswa):** unggah `jawaban_siswa` beserta `email` dan `nama`."
+    ),
     response_description="Job yang sedang diproses",
 )
 async def similarity(
     caller: CallerDep,
     jawaban: JawabanDep,
-    pengajar: str = Form(),
-    mata_pelajaran: str = Form(),
-    kelas: str = Form(),
-    judul_tugas: str = Form(),
+    pengajar: str = Form(description="Nama pengajar (wajib)"),
+    mata_pelajaran: str = Form(description="Nama mata pelajaran (wajib)"),
+    kelas: str = Form(description="Nama kelas, mis. VII A (wajib)"),
+    judul_tugas: str = Form(description="Judul tugas/ulangan (wajib)"),
 ) -> dict[str, object]:
     _validasi_identitas(pengajar, mata_pelajaran, kelas, judul_tugas)
 
@@ -440,16 +524,24 @@ async def similarity(
     "/ai-usage",
     status_code=202,
     summary="Periksa indikasi penggunaan AI pada jawaban siswa",
+    description=(
+        "Isi 4 kolom identitas wajib (`pengajar`, `mata_pelajaran`, `kelas`, "
+        "`judul_tugas`), lalu pilih **salah satu** cara kirim jawaban:\n\n"
+        "- **Cara 1 (ZIP):** unggah `jawaban_zip` berisi `manifest.csv` + berkas siswa.\n"
+        "- **Cara 2 (Per siswa):** unggah `jawaban_siswa` beserta `email` dan `nama`."
+    ),
     response_description="Job yang sedang diproses",
 )
 async def ai_usage(
     caller: CallerDep,
     jawaban: JawabanDep,
-    pengajar: str = Form(),
-    mata_pelajaran: str = Form(),
-    kelas: str = Form(),
-    judul_tugas: str = Form(),
-    jenjang: str | None = Form(default=None),
+    pengajar: str = Form(description="Nama pengajar (wajib)"),
+    mata_pelajaran: str = Form(description="Nama mata pelajaran (wajib)"),
+    kelas: str = Form(description="Nama kelas, mis. VII A (wajib)"),
+    judul_tugas: str = Form(description="Judul tugas/ulangan (wajib)"),
+    jenjang: str | None = Form(
+        default=None, description="Jenjang pendidikan, mis. SMP kelas VII (opsional)"
+    ),
 ) -> dict[str, object]:
     _validasi_identitas(pengajar, mata_pelajaran, kelas, judul_tugas)
 
